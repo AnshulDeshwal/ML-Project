@@ -1,0 +1,81 @@
+import numpy as np
+from scipy.optimize import*
+import math
+import random
+import matplotlib
+import matplotlib.pyplot as plt
+from tkinter import*
+from tkinter import ttk
+import pandas as pd
+SW = np.array([0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65])
+SW_table = pd.DataFrame(SW, columns = ['SW'])
+KRW = np.array([0, 0.003, 0.008, 0.018, 0.035, 0.054, 0.08, 0.105, 0.14, 0.18])
+KRO = np.array([1, 0.68, 0.46, 0.32, 0.2, 0.124, 0.071, 0.038, 0.017, 0])
+VISW = 0.95 # unit is in centipoise
+VISO = 3.6  # unit is in centipoise
+# Initial water saturation
+SWI = 0.2
+# Calculating the coefficient b
+b = (np.log((KRO/KRW)[2])-np.log((KRO/KRW)[3]))/(SW[3]-SW[2])
+# Calculating the coefficient a
+a = (KRO/KRW)[2]*math.exp(b*SW[2])
+# Calculating the fractional flow
+def fw(SW):
+    fw = 1/(1+a*(VISW/VISO)*np.exp(-b*SW))
+    return(fw)
+''' To calculate a suitable slope for the tangent to the fractional flow curve
+Drawn from the initial water saturation'''
+''' STEP1: Generate a list of uniformly distributed random numbers from a water saturation
+# greater than the initial water saturation to 1'''
+xList = []
+for i in range(0, 10000):
+    x = random.uniform(SWI+0.1, 1)
+    xList.append(x) 
+xs = np.array(xList)
+'''STEP2: Calculate different slopes of tangents or lines intersecting the fractional
+flow curve using the array generated in step 1 as the water saturation.'''
+m = 1/((xs-SWI)*(1+(VISW/VISO)*a*np.exp(-b*xs)))
+ '''STEP3: Calculate the maximum slope from different slopes generated in step 2.
+ The value of this slope will be the slope of the tangent to the fractional flow
+ curve.'''
+tangent_slope=max(m)
+# Calculate the breakthrough saturation.
+Saturation_at_Breakthrough = SWI + 1/tangent_slope
+# Calculating the saturation at the flood front
+def funct(SWF):
+    swf = SWF[0]
+    F = np.empty((1))
+    F[0] = ((tangent_slope*(swf-SWI)*(1+(VISW/VISO)*a*math.exp(-b*swf)))-1)
+    return F
+SWF_Guess = np.array([SWI+0.1])
+SWF = fsolve(funct, SWF_Guess)[0]
+# Fractional flow at the flood front
+Fwf = fw(SWF)
+# Fractional flow
+Fw = fw(SW)
+# Calculating the differential of the fractional flow equation
+dfw_dSw = (VISW/VISO)*a*b*np.exp(-SW*b)/(1+(VISW/VISO)*a*np.exp(-SW*b))**2
+dfw_dSw_table = pd.DataFrame(dfw_dSw, columns = ['dFw/dSw'])
+# Generating the data for the tangent plot
+tangent = (SW-SWI)*tangent_slope
+# Making the plots
+fig, ax = plt.subplots(constrained_layout=True)
+fig.set_figheight(4)
+fig.set_figwidth(7)
+fractional_flow_curve = ax.plot(SW, fw(SW), 'b', label = 'Fractional Flow (Fw)')
+tangent_curve = ax.plot(SW, tangent, 'k--')
+ax.set_ylabel("Fractional Flow (fw)",fontsize=14)
+ax.set_xlabel("Water Saturation (Sw)",fontsize=14)
+ax.set_ylim([0,1])
+ax.set_xlim([0,1])
+# twin object for two different y-axis on the same plot
+ax2=ax.twinx()
+# make a plot with different y-axis using second axis object
+dfw_dSw_curve = ax2.plot(SW, dfw_dSw, 'r', label ='dFw/dSw')
+ax2.set_ylabel("dfw/dSw",fontsize=14)
+ax.grid(True)
+ax2.legend()
+ax.legend(loc='upper left')
+ax.annotate("  (Swf, Fwf)", (SWF, Fwf))
+ax.annotate(" SwBT", (Saturation_at_Breakthrough, 1))
+plt.show()
